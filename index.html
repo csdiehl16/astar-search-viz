@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Search — Pathfinding Visualized</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+</head>
+<body>
+
+    <header class="hero">
+        <div class="hero-eyebrow">Algorithm Visualization</div>
+        <h1>A* Search</h1>
+        <p class="hero-sub">
+            Optimal pathfinding through a weighted graph — combining traversal cost
+            and a distance heuristic to always find the shortest route.
+        </p>
+    </header>
+
+    <div class="page">
+        <p class="intro">
+            This page demonstrates using the A* algorithm for finding the shortest path to a goal
+            destination on a graph. We <span class="tag tag-explore">explore</span> the node on
+            <span class="tag tag-frontier">the frontier</span> with the lowest cost, and repeat until
+            we find the <span class="tag tag-path">best path</span>.
+        </p>
+    </div>
+
+    <div class="viz-section">
+        <div id="controls">
+            <label for="stepSlider">Step</label>
+            <input type="range" id="stepSlider" min="0" max="0" step="1" value="0" disabled>
+            <span class="step-counter"><span id="stepValue">00</span></span>
+        </div>
+
+        <div id="viz-container">
+            <span class="viz-badge">Graph View</span>
+            <div id="loading">Initializing runtime…</div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-pip explored"></div>
+                <span>Explored</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip frontier"></div>
+                <span>Frontier</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip path"></div>
+                <span>Best Path</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page">
+        <section>
+            <h2>How it works</h2>
+            <p>
+                Imagine you are dropped in a random city, with a few roads leading out of it. Each road
+                has a sign showing how far it is to the next town. You know what city you want to end up
+                in, and approximately where it is on a map — but you don't know anything about the road
+                network in between.
+            </p>
+            <p>
+                A* uses a combination of how expensive it is to reach a node so far
+                (<em>g(n)</em>) and a heuristic, an educated guess of how far that node still is from
+                the goal (<em>h(n)</em>) — here, straight-line (Euclidean) distance.
+            </p>
+            <p class="formula"><em>f(n) = g(n) + h(n)</em></p>
+            <p>
+                The search keeps a priority queue of cities to check next, ordered by the lowest
+                <em>f(n)</em>. We pop the top item, expand all roads leading out of it onto the
+                frontier, and repeat until we reach the goal.
+            </p>
+            <p>
+                The Python implementation is based on the public examples from
+                <a href="https://github.com/aimacode" target="_blank" rel="noopener">"AI: A Modern Approach"</a>.
+            </p>
+        </section>
+    </div>
+
+    <script type="module">
+        import { renderStep } from './visualization.js';
+
+        const slider    = document.getElementById('stepSlider');
+        const stepValue = document.getElementById('stepValue');
+        const loading   = document.getElementById('loading');
+        const container = document.getElementById('viz-container');
+
+        async function main() {
+            const graphFile = new URLSearchParams(window.location.search).get('graph') ?? 'marais_paris_france';
+            const graph = await fetch(`./data/${graphFile}.json`).then((r) => r.json());
+
+            loading.textContent = 'Loading Pyodide runtime…';
+            const pyodide = await loadPyodide();
+
+            pyodide.globals.set('graph_json_data', JSON.stringify(graph));
+
+            loading.textContent = 'Running A* search…';
+            const pyCode = await fetch('./algorithm.py').then((r) => r.text());
+            await pyodide.runPythonAsync(pyCode);
+
+            const graphSolution = JSON.parse(pyodide.globals.get('result_json'));
+
+            slider.max      = graphSolution.length - 1;
+            slider.disabled = false;
+            loading.remove();
+
+            function update() {
+                const step = parseInt(slider.value, 10);
+                stepValue.textContent = String(step).padStart(2, '0');
+                renderStep(container, graph, graphSolution, step);
+            }
+
+            slider.addEventListener('input', update);
+            update();
+
+            let rafId = null;
+            const ro = new ResizeObserver(() => {
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = requestAnimationFrame(update);
+            });
+            ro.observe(container);
+        }
+
+        main().catch((err) => {
+            loading.textContent = `Error: ${err.message}`;
+            console.error(err);
+        });
+    </script>
+
+</body>
+</html>
