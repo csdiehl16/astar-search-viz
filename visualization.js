@@ -195,6 +195,10 @@ export function renderStep(container, graph, graphSolution, step) {
   const nextBestIdx = minFrontierCost !== null ? current.frontierCost.indexOf(minFrontierCost) : -1;
   const nextBestId = nextBestIdx >= 0 ? current.frontier[nextBestIdx] : null;
 
+  const frontierColorScale = d3.scaleQuantile()
+    .domain(current.frontierCost)
+    .range(["#d4d4d7", "#a8a8ac", "#7c7c80", "#555558", "#333336"]);
+
   // Regular +X labels for non-card frontier nodes
   for (const node of nodes) {
     if (!current.frontier.includes(node.id)) continue;
@@ -205,7 +209,7 @@ export function renderStep(container, graph, graphSolution, step) {
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#0d0d0d";
     ctx.strokeText(label, node.x, node.y - 14);
-    ctx.fillStyle = COLOR_FRONTIER;
+    ctx.fillStyle = frontierColorScale(cost);
     ctx.fillText(label, node.x, node.y - 14);
   }
 
@@ -348,6 +352,13 @@ export function renderBidirStep(container, graph, bidirSolution, step) {
   // Regular +X labels — skip nodes that will get cards
   const cardIds = new Set([nextBestId, fwdPathEndId, bwdPathEndId].filter(Boolean));
 
+  const fwdColorScale = d3.scaleQuantile()
+    .domain(cur.forwardFrontierCost)
+    .range(["#d4d4d7", "#a8a8ac", "#7c7c80", "#555558", "#333336"]);
+  const bwdColorScale = d3.scaleQuantile()
+    .domain(cur.backwardFrontierCost)
+    .range(["#e8c4a0", "#c4956a", "#9a6a44", "#704428", "#4a2810"]);
+
   for (const node of nodes) {
     const isFwdFrt = fwdFrt.has(node.id);
     const isBwdFrt = bwdFrt.has(node.id);
@@ -358,11 +369,11 @@ export function renderBidirStep(container, graph, bidirSolution, step) {
     if (isFwdFrt) {
       const cost = cur.forwardFrontierCost[cur.forwardFrontier.indexOf(node.id)];
       label = `+${cost - fwdTopCost}`;
-      color = COLOR_FRONTIER;
+      color = fwdColorScale(cost);
     } else {
       const cost = cur.backwardFrontierCost[cur.backwardFrontier.indexOf(node.id)];
       label = `+${cost - bwdTopCost}`;
-      color = COLOR_BWD_FRONTIER;
+      color = bwdColorScale(cost);
     }
 
     ctx.lineWidth = 3;
