@@ -31,13 +31,13 @@
         </p>
     </div>
 
-    <div class="viz-section">
-        <div id="controls">
-            <label for="stepSlider">Step</label>
-            <input type="range" id="stepSlider" min="0" max="0" step="1" value="0" disabled>
-            <span class="step-counter"><span id="stepValue">00</span></span>
-        </div>
+    <div id="controls">
+        <label for="stepSlider">Step</label>
+        <input type="range" id="stepSlider" min="0" max="0" step="1" value="0" disabled>
+        <span class="step-counter"><span id="stepValue">00</span></span>
+    </div>
 
+    <div class="viz-section">
         <div id="viz-container">
             <span class="viz-badge">Graph View</span>
             <div id="loading">Initializing runtime…</div>
@@ -58,6 +58,9 @@
             </div>
         </div>
     </div>
+
+    <!-- sentinel: when this scrolls out of view upward, slider switches to bidir -->
+    <div id="viz1-sentinel"></div>
 
     <div class="page">
         <section>
@@ -86,13 +89,76 @@
         </section>
     </div>
 
-    <script type="module">
-        import { renderStep } from './visualization.js';
+    <div class="page bidir-intro">
+        <p class="intro">
+            Now watch the same graph searched with <strong>Bidirectional A*</strong>. Two frontiers
+            expand simultaneously — one from the <span class="tag tag-path">start</span>,
+            one from the <span class="tag tag-bwd-frontier">goal</span> — and terminate as soon as
+            they meet. The slider above switches to control this visualization once you scroll past the first one.
+        </p>
+    </div>
 
-        const slider    = document.getElementById('stepSlider');
-        const stepValue = document.getElementById('stepValue');
-        const loading   = document.getElementById('loading');
-        const container = document.getElementById('viz-container');
+    <div class="viz-section">
+        <div id="viz-container-bidir">
+            <span class="viz-badge">Bidirectional A*</span>
+            <div id="loading-bidir">Initializing runtime…</div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-pip explored"></div>
+                <span>Fwd Explored</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip frontier"></div>
+                <span>Fwd Frontier</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip bwd-explored"></div>
+                <span>Bwd Explored</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip bwd-frontier"></div>
+                <span>Bwd Frontier</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip path"></div>
+                <span>Fwd Path</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-pip bwd-path"></div>
+                <span>Bwd Path</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page">
+        <section>
+            <h2>Why bidirectional?</h2>
+            <p>
+                A* from a single source expands a circle of radius <em>d</em> around the start.
+                Two simultaneous frontiers each expand a circle of radius <em>d/2</em>, meeting
+                in the middle — cutting the explored area roughly in half.
+            </p>
+            <p>
+                The termination condition is subtle: we stop not when the frontiers first touch,
+                but when the sum of the two minimum frontier f-values exceeds the cost of the best
+                known meeting path. This guarantees optimality even when the meeting point isn't
+                the cheapest one.
+            </p>
+            <p class="formula"><em>f<sub>fwd</sub>(top) + f<sub>bwd</sub>(top) ≥ best</em></p>
+        </section>
+    </div>
+
+    <script type="module">
+        import { renderStep, renderBidirStep } from './visualization.js';
+
+        const slider       = document.getElementById('stepSlider');
+        const stepValue    = document.getElementById('stepValue');
+        const loading      = document.getElementById('loading');
+        const container    = document.getElementById('viz-container');
+        const loadingBidir = document.getElementById('loading-bidir');
+        const containerBidir = document.getElementById('viz-container-bidir');
 
         async function main() {
             const graphFile = new URLSearchParams(window.location.search).get('graph') ?? 'marais_paris_france';
@@ -103,35 +169,71 @@
 
             pyodide.globals.set('graph_json_data', JSON.stringify(graph));
 
-            loading.textContent = 'Running A* search…';
+            loading.textContent = 'Running searches…';
+            loadingBidir.textContent = 'Running searches…';
             const pyCode = await fetch('./algorithm.py').then((r) => r.text());
             await pyodide.runPythonAsync(pyCode);
 
             const graphSolution = JSON.parse(pyodide.globals.get('result_json'));
+            const bidirSolution = JSON.parse(pyodide.globals.get('bidir_result_json'));
 
-            slider.max      = graphSolution.length - 1;
-            slider.disabled = false;
             loading.remove();
+            loadingBidir.remove();
+
+            // ── Active-viz state ──────────────────────────────────────────────
+            let activeViz = 'astar'; // 'astar' | 'bidir'
 
             function update() {
                 const step = parseInt(slider.value, 10);
                 stepValue.textContent = String(step).padStart(2, '0');
-                renderStep(container, graph, graphSolution, step);
+                if (activeViz === 'astar') {
+                    renderStep(container, graph, graphSolution, step);
+                } else {
+                    renderBidirStep(containerBidir, graph, bidirSolution, step);
+                }
             }
 
-            slider.addEventListener('input', update);
+            function switchTo(viz) {
+                if (activeViz === viz) return;
+                activeViz = viz;
+                slider.value   = 0;
+                slider.max     = viz === 'astar' ? graphSolution.length - 1 : bidirSolution.length - 1;
+                slider.disabled = false;
+                update();
+            }
+
+            slider.max      = graphSolution.length - 1;
+            slider.disabled = false;
             update();
 
+            slider.addEventListener('input', update);
+
+            // ── Resize observers ──────────────────────────────────────────────
             let rafId = null;
             const ro = new ResizeObserver(() => {
                 if (rafId) cancelAnimationFrame(rafId);
                 rafId = requestAnimationFrame(update);
             });
             ro.observe(container);
+            ro.observe(containerBidir);
+
+            // ── Intersection observer: switch slider when viz-1 leaves view ──
+            // A sentinel sits at the bottom of the first viz section.
+            // When it scrolls out of view upward, the user is past viz-1.
+            const sentinel = document.getElementById('viz1-sentinel');
+            const io = new IntersectionObserver(([entry]) => {
+                const scrolledPast = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+                switchTo(scrolledPast ? 'bidir' : 'astar');
+            }, { threshold: 0 });
+            io.observe(sentinel);
+
+            // Render the bidir viz at step 0 immediately so it's not blank
+            renderBidirStep(containerBidir, graph, bidirSolution, 0);
         }
 
         main().catch((err) => {
             loading.textContent = `Error: ${err.message}`;
+            loadingBidir.textContent = `Error: ${err.message}`;
             console.error(err);
         });
     </script>

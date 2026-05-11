@@ -124,6 +124,10 @@ h1 {
     background: rgba(255, 255, 255, 0.14);
     color: var(--fg-1);
 }
+.tag-bwd-frontier {
+    background: rgba(196, 149, 106, 0.15);
+    color: #c4956a;
+}
 
 /* ── Controls ──────────────────────────────────────── */
 
@@ -131,11 +135,10 @@ h1 {
     display: flex;
     align-items: center;
     gap: 1.25rem;
-    margin-bottom: 1.25rem;
     position: sticky;
     top: 0;
     z-index: 100;
-    padding: 0.75rem 0;
+    padding: 0.75rem 2rem;
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -263,8 +266,17 @@ h1 {
 .legend-pip.frontier {
     background: #8e8e93;
 }
+.legend-pip.bwd-explored {
+    background: #3a2518;
+}
+.legend-pip.bwd-frontier {
+    background: #c4956a;
+}
 .legend-pip.path {
     background: var(--fg-1);
+}
+.legend-pip.bwd-path {
+    background: #e8a87c;
 }
 
 /* ── Explainer section ─────────────────────────────── */
@@ -332,6 +344,21 @@ a {
 a:hover {
     color: var(--fg-1);
     border-bottom-color: var(--fg-3);
+}
+
+/* ── Bidir intro ───────────────────────────────────── */
+
+.bidir-intro {
+    margin-top: 6rem;
+}
+
+.bidir-intro strong {
+    color: var(--fg-1);
+    font-weight: 500;
+}
+
+#viz1-sentinel {
+    height: 0;
 }
 
 /* ── Keyframes ─────────────────────────────────────── */

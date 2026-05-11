@@ -248,8 +248,102 @@ def astar_search(problem):
     return best_first_graph_search(problem, lambda n: n.path_cost + problem.h(n))
 
 
+bidir_iterations = []
+
+
+def track_bidir_progress(fwd_frontier, fwd_explored, bwd_frontier, bwd_explored,
+                         fwd_best_path, bwd_best_path, f_fwd, f_bwd):
+    bidir_iterations.append({
+        "forwardFrontier":     [s.state for s in fwd_frontier],
+        "forwardFrontierCost": [f_fwd(s) for s in fwd_frontier],
+        "forwardExplored":     list(fwd_explored),
+        "backwardFrontier":     [s.state for s in bwd_frontier],
+        "backwardFrontierCost": [f_bwd(s) for s in bwd_frontier],
+        "backwardExplored":     list(bwd_explored),
+        "forwardBestPath":     fwd_best_path,
+        "backwardBestPath":    bwd_best_path,
+    })
+
+
+def bidir_astar_search(problem):
+    problem_rev = GraphProblem(problem.goal, problem.initial, problem.graph)
+
+    f_fwd = lambda n: n.path_cost + problem.h(n)
+    f_bwd = lambda n: n.path_cost + problem_rev.h(n)
+
+    fwd_frontier = PriorityQueue("min", f_fwd)
+    bwd_frontier = PriorityQueue("min", f_bwd)
+    fwd_frontier.append(Node(problem.initial))
+    bwd_frontier.append(Node(problem.goal))
+
+    fwd_explored = {}   # state → Node
+    bwd_explored = {}
+
+    best_cost     = float("inf")
+    best_fwd_node = None
+    best_bwd_node = None
+    last_fwd_node = Node(problem.initial)
+    last_bwd_node = Node(problem.goal)
+
+    def try_meet(fwd_node, bwd_node):
+        nonlocal best_cost, best_fwd_node, best_bwd_node
+        total = fwd_node.path_cost + bwd_node.path_cost
+        if total < best_cost:
+            best_cost     = total
+            best_fwd_node = fwd_node
+            best_bwd_node = bwd_node
+
+    while not fwd_frontier.is_empty() and not bwd_frontier.is_empty():
+        fwd_min = f_fwd(fwd_frontier.peek())
+        bwd_min = f_bwd(bwd_frontier.peek())
+
+        if fwd_min + bwd_min >= best_cost:
+            break
+
+        if fwd_min <= bwd_min:
+            node = fwd_frontier.pop()
+            last_fwd_node = node
+            fwd_explored[node.state] = node
+            if node.state in bwd_explored:
+                try_meet(node, bwd_explored[node.state])
+            for child in node.expand(problem):
+                if child.state not in fwd_explored and child not in fwd_frontier:
+                    fwd_frontier.append(child)
+                    if child.state in bwd_explored:
+                        try_meet(child, bwd_explored[child.state])
+                elif child in fwd_frontier and f_fwd(child) < fwd_frontier[child]:
+                    del fwd_frontier[child]
+                    fwd_frontier.append(child)
+        else:
+            node = bwd_frontier.pop()
+            last_bwd_node = node
+            bwd_explored[node.state] = node
+            if node.state in fwd_explored:
+                try_meet(fwd_explored[node.state], node)
+            for child in node.expand(problem_rev):
+                if child.state not in bwd_explored and child not in bwd_frontier:
+                    bwd_frontier.append(child)
+                    if child.state in fwd_explored:
+                        try_meet(fwd_explored[child.state], child)
+                elif child in bwd_frontier and f_bwd(child) < bwd_frontier[child]:
+                    del bwd_frontier[child]
+                    bwd_frontier.append(child)
+
+        fwd_src = best_fwd_node if best_fwd_node is not None else last_fwd_node
+        bwd_src = best_bwd_node if best_bwd_node is not None else last_bwd_node
+        track_bidir_progress(
+            fwd_frontier, set(fwd_explored.keys()),
+            bwd_frontier, set(bwd_explored.keys()),
+            [n.state for n in fwd_src.path()],
+            [n.state for n in bwd_src.path()],
+            f_fwd, f_bwd,
+        )
+
+
 # graph_json_data is set by JavaScript via pyodide.globals.set() before running this script
 problem = load_graph_from_json_data(graph_json_data)
 astar_search(problem)
-
 result_json = json.dumps(iterations)
+
+bidir_astar_search(problem)
+bidir_result_json = json.dumps(bidir_iterations)
